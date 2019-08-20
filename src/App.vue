@@ -1,5 +1,13 @@
 <template>
   <div id="app">
+    <audio
+      :src="error"
+      ref="error"
+    ></audio>
+    <audio
+      :src="success"
+      ref="successMP3"
+    ></audio>
     <div class="file-content">
       <input
         type="file"
@@ -33,6 +41,9 @@
             type="primary"
             @click="exportExcel"
           >导出</el-button>
+        </el-form-item>
+        <el-form-item>
+          {{ tip }}
         </el-form-item>
       </el-form>
     </el-card>
@@ -77,14 +88,17 @@
         </el-table>
       </el-col>
       <el-col :span="2"></el-col>
-      <el-col :span="11" id="exportExcel">
+      <el-col
+        :span="11"
+        id="exportExcel"
+      >
         <el-table
           :data="selectData"
           style="width: 100%"
           height="450"
         >
           <el-table-column label="扫码数据统计">
-            <el-table-column :label="`导入数据：${tableLengthData.tableLength}票;实际扫码：${tableLengthData.actual}票;数据内：${tableLengthData.inData};不在数据内：${tableLengthData.noInData}`">
+            <el-table-column :label="`导入数据：${tableLengthData.tableLength}票;实际扫码：${tableLengthData.actual}票;数据内：${tableLengthData.inData};不在数据内：${tableLengthData.noInData};重复：${tableLengthData.repeat}`">
               <el-table-column label="未扫码运单号">
                 <el-table-column
                   prop="客户"
@@ -169,18 +183,23 @@ export default {
   name: 'App',
   data () {
     return {
+      error: require('./assets/error.mp3'),
+      success: require('./assets/success.mp3'),
       tableData: [],
       selectData: [],
       noSelectData: [],
+      searchData: [],
       tableLengthData: {
         tableLength: 0, // 总票数
         actual: 0, // 实际扫码
         inData: 0, // 数据内
-        noInData: 0 // 不在数据内
+        noInData: 0, // 不在数据内
+        repeat: 0 // 重复
       },
       form: {
         num: ''
-      }
+      },
+      tip: ''
     }
   },
   mounted () {
@@ -188,28 +207,51 @@ export default {
   },
   methods: {
     exportExcel () {
-      table2excel('exportExcel')
+      if (!this.tableData.length) return this.$message.error('请导入表格')
+      this.$confirm('是否确认导出?', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        table2excel('exportExcel')
+      }).catch(() => {
+      })
     },
     onSubmit () {
       if (!this.tableData.length) return this.$message.error('请导入表格')
       this.tableLengthData.actual = this.tableLengthData.actual + 1
       for (let i = 0; i < this.tableData.length; i++) {
+        // 重复
+        const index = this.searchData.findIndex(item => {
+          return item['运单号'] === this.form.num
+        })
+        if (index !== -1) {
+          this.$refs['error'].play()
+          this.$message.warning('运单号重复')
+          this.tableLengthData.repeat = this.tableLengthData.repeat + 1
+          this.form.num = ''
+          return
+        }
         // 查找成功
         if (this.tableData[i]['运单号'] === this.form.num) {
+          this.$refs['successMP3'].play()
           this.tableLengthData.inData = this.tableLengthData.inData + 1
           const index = this.selectData.findIndex(item => {
             return item['运单号'] === this.form.num
           })
+          this.searchData.push(this.tableData[i])
           this.selectData.splice(index, 1)
-          this.$message.success('订单号查询成功')
+          this.tip = this.tableData[i]
+          this.$message.success('运单号查询成功')
           this.form.num = ''
           return
         }
       }
       // 查询不到
+      this.$refs['error'].play()
       this.noSelectData.push({ '运单号': this.form.num })
       this.tableLengthData.noInData = this.tableLengthData.noInData + 1
-      this.$message.warning('查询不到订单号')
+      this.$message.warning('查询不到运单号')
       this.form.num = ''
     },
     excelFileChange () {
